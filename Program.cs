@@ -44,14 +44,15 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     await using var t = await ctx.Database.BeginTransactionAsync(ct);
     ctx.Orders.Add(order);
     await ctx.SaveChangesAsync(ct);
-    foreach (var l in order.Lines.OrderBy(l => l.ItemId).ThenBy(l => l.WarehouseId))
-    {
-        await ctx.Stock
-                 .Where(s => s.ItemId == l.ItemId && s.WarehouseId == l.WarehouseId)
-                 .ExecuteUpdateAsync(setter => setter.SetProperty(s => s.Reserved, s => s.Reserved + l.Quantity), ct);
-    }
-    await t.CommitAsync(ct);
 
+    var q = from l in ctx.OrderLines
+            where l.OrderId == order.Id
+            join s in ctx.Stock
+            on new { l.ItemId, l.WarehouseId } equals new { s.ItemId, s.WarehouseId }
+            select new { s, l };
+    await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);
+    await t.CommitAsync(ct);
+    
 })
 .WithName("PlaceOrder");
 

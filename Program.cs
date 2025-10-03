@@ -53,7 +53,9 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
                 join s in ctx.Stock
                 on new { l.ItemId, l.WarehouseId } equals new { s.ItemId, s.WarehouseId }
                 select new { s, l };
-        await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);        
+        await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);
+
+        if (await q.AnyAsync(x => x.s.Quantity < x.s.Reserved, ct)) throw new Exception("Oversell");
     }, ct => Task.FromResult(false), ct);
     
 })

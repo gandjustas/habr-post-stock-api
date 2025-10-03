@@ -6,7 +6,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<StockApiDataContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgOptions => npgOptions.EnableRetryOnFailure())
        .UseSnakeCaseNamingConvention()
 );
 var app = builder.Build();
@@ -30,6 +31,7 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
 {
     var lines = from l in order.Lines
                 group l by new { l.ItemId, l.WarehouseId } into g
+                orderby g.Key.ItemId, g.Key.WarehouseId
                 select new OrderLine()
                 {
                     ItemId = g.Key.ItemId,
@@ -41,17 +43,18 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     order.Lines.Clear();
     order.Lines.AddRange(lines);
 
-    await using var t = await ctx.Database.BeginTransactionAsync(ct);
-    ctx.Orders.Add(order);
-    await ctx.SaveChangesAsync(ct);
-
-    var q = from l in ctx.OrderLines
-            where l.OrderId == order.Id
-            join s in ctx.Stock
-            on new { l.ItemId, l.WarehouseId } equals new { s.ItemId, s.WarehouseId }
-            select new { s, l };
-    await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);
-    await t.CommitAsync(ct);
+    var db = ctx.Database;
+    await db.CreateExecutionStrategy().ExecuteInTransactionAsync(async ct =>
+    {
+        ctx.Orders.Add(order);
+        await ctx.SaveChangesAsync(ct);
+        var q = from l in ctx.OrderLines
+                where l.OrderId == order.Id
+                join s in ctx.Stock
+                on new { l.ItemId, l.WarehouseId } equals new { s.ItemId, s.WarehouseId }
+                select new { s, l };
+        await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);        
+    }, ct => Task.FromResult(false), ct);
     
 })
 .WithName("PlaceOrder");

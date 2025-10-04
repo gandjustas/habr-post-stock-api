@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using Laraue.EfCoreTriggers.Common.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
@@ -46,7 +47,23 @@ public class StockApiDataContext(DbContextOptions<StockApiDataContext> options) 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var tableBuilder = modelBuilder.Entity<Stock>();
-        tableBuilder.Property(s => s.Reserved).HasDefaultValue(0);
+        var reservedProp = tableBuilder.Property(s => s.Reserved).HasDefaultValue(0);
+        var quantityProp = tableBuilder.Property(s => s.Quantity);
+
+
+        tableBuilder.ToTable(t =>
+            t.HasCheckConstraint("check_stock", $"{quantityProp.Metadata.GetColumnName()} >= {reservedProp.Metadata.GetColumnName()}"));
+
+        modelBuilder.Entity<OrderLine>()
+                    .AfterInsert(t =>
+                        t.Action(a =>
+                            a.Update<Stock>(
+                                (l, s) => s.ItemId == l.New.ItemId && s.WarehouseId == l.New.WarehouseId,
+                                (l, s) => new Stock { Reserved = s.Reserved + l.New.Quantity }
+                            )
+                        )
+                    );
+
     }
 
 

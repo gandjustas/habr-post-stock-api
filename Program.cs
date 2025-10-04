@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Laraue.EfCoreTriggers.PostgreSql.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -7,8 +9,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<StockApiDataContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
-        npgOptions => npgOptions.EnableRetryOnFailure())
+            npgOptions => npgOptions.EnableRetryOnFailure())
        .UseSnakeCaseNamingConvention()
+       .UsePostgreSqlTriggers()
+       
 );
 var app = builder.Build();
 
@@ -43,20 +47,8 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     order.Lines.Clear();
     order.Lines.AddRange(lines);
 
-    var db = ctx.Database;
-    await db.CreateExecutionStrategy().ExecuteInTransactionAsync(async ct =>
-    {
-        ctx.Orders.Add(order);
-        await ctx.SaveChangesAsync(ct);
-        var q = from l in ctx.OrderLines
-                where l.OrderId == order.Id
-                join s in ctx.Stock
-                on new { l.ItemId, l.WarehouseId } equals new { s.ItemId, s.WarehouseId }
-                select new { s, l };
-        await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);
-
-        if (await q.AnyAsync(x => x.s.Quantity < x.s.Reserved, ct)) throw new Exception("Oversell");
-    }, ct => Task.FromResult(false), ct);
+    ctx.Orders.Add(order);
+    await ctx.SaveChangesAsync(ct);
     
 })
 .WithName("PlaceOrder");

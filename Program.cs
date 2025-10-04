@@ -40,8 +40,18 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
 
     order.Lines.Clear();
     order.Lines.AddRange(lines);
+
+    await using var t = await ctx.Database.BeginTransactionAsync(ct);
     ctx.Orders.Add(order);
-    await ctx.SaveChangesAsync(ct);    
+    await ctx.SaveChangesAsync(ct);
+    foreach (var l in order.Lines.OrderBy(l => l.ItemId).ThenBy(l => l.WarehouseId))
+    {
+        await ctx.Stock
+                 .Where(s => s.ItemId == l.ItemId && s.WarehouseId == l.WarehouseId)
+                 .ExecuteUpdateAsync(setter => setter.SetProperty(s => s.Reserved, s => s.Reserved + l.Quantity), ct);
+    }
+    await t.CommitAsync(ct);
+
 })
 .WithName("PlaceOrder");
 

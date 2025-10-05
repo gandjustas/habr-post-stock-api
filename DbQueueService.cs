@@ -16,17 +16,22 @@ internal class DbQueueService<TContext>(IOptions<DbQueueServiceOptions> options,
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var reader = channel.Reader;
+        List<Task> tasks = new();
 
+        var reader = channel.Reader;
         while (await reader.WaitToReadAsync(stoppingToken))
         {
             List<QueueItem> batch = new();
+
+            if (tasks.Count >= options.Value.MaxConcurrentBatches) await Task.WhenAny(tasks.ToArray());
+
             while (batch.Count < options.Value.MaxItemsInBatch
                     && reader.TryRead(out var item)) batch.Add(item);
 
-            await ProcessBatch(sp, batch, stoppingToken);
+            tasks.RemoveAll(t => t.IsCompleted);
+            tasks.Add(ProcessBatch(sp, batch, stoppingToken));
         }
-
+        await Task.WhenAny(tasks.ToArray());
     }
 
     private async Task ProcessBatch(IServiceProvider sp, IEnumerable<QueueItem> batch, CancellationToken stoppingToken)
@@ -54,4 +59,5 @@ internal class DbQueueService<TContext>(IOptions<DbQueueServiceOptions> options,
 internal class DbQueueServiceOptions
 {
     public int MaxItemsInBatch { get; set; } = 50;
+    public int MaxConcurrentBatches { get; set; } = 15;
 } 

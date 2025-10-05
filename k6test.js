@@ -8,7 +8,7 @@ const itemsCount = 10;
 const warehousesCount = 10;
 export const options = {
     iterations: itemsCount * warehousesCount * 300,
-    vus: 50,
+    vus: 100,
 };
 
 export default function () {

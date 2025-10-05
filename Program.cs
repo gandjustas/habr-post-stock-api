@@ -12,8 +12,12 @@ builder.Services.AddDbContext<StockApiDataContext>(opt =>
             npgOptions => npgOptions.EnableRetryOnFailure())
        .UseSnakeCaseNamingConvention()
        .UsePostgreSqlTriggers()
-       
+
 );
+builder.Services.Configure<DbQueueServiceOptions>(o => { });
+builder.Services.AddSingleton<DbQueueService<StockApiDataContext>>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DbQueueService<StockApiDataContext>>());
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -31,7 +35,7 @@ if (app.Environment.IsDevelopment())
 //app.UseHttpsRedirection();
 
 
-app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, CancellationToken ct) =>
+app.MapPost("/place-order/", async (Order order, DbQueueService<StockApiDataContext> worker, CancellationToken ct) =>
 {
     var lines = from l in order.Lines
                 group l by new { l.ItemId, l.WarehouseId } into g
@@ -47,9 +51,11 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     order.Lines.Clear();
     order.Lines.AddRange(lines);
 
-    ctx.Orders.Add(order);
-    await ctx.SaveChangesAsync(ct);
-    
+    await worker.ExecuteAsync(async (ctx, ct) =>
+    {
+        ctx.Orders.Add(order);
+        await ctx.SaveChangesAsync(ct);
+    }, ct);    
 })
 .WithName("PlaceOrder");
 

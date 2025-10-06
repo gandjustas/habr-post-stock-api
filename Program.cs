@@ -12,7 +12,6 @@ builder.Services.AddDbContext<StockApiDataContext>(opt =>
             npgOptions => npgOptions.EnableRetryOnFailure())
        .UseSnakeCaseNamingConvention()
        .UsePostgreSqlTriggers()
-
 );
 builder.Services.Configure<DbQueueServiceOptions>(o => { });
 builder.Services.AddSingleton<DbQueueService<StockApiDataContext>>();
@@ -35,28 +34,35 @@ if (app.Environment.IsDevelopment())
 //app.UseHttpsRedirection();
 
 
-app.MapPost("/place-order/", async (Order order, DbQueueService<StockApiDataContext> worker, CancellationToken ct) =>
+app.MapPost("/place-order/", async (OrderModel order, DbQueueService<StockApiDataContext> worker, CancellationToken ct) =>
 {
     var lines = from l in order.Lines
                 group l by new { l.ItemId, l.WarehouseId } into g
                 orderby g.Key.ItemId, g.Key.WarehouseId
-                select new OrderLine()
+                select new
                 {
-                    ItemId = g.Key.ItemId,
-                    WarehouseId = g.Key.WarehouseId,
+                    g.Key.ItemId,
+                    g.Key.WarehouseId,
                     Quantity = g.Aggregate(0, (s, l) => s + l.Quantity)
                 };
-    lines = lines.ToArray();
 
-    order.Lines.Clear();
-    order.Lines.AddRange(lines);
-
+    Order dbOrder = new() { Id = order.Id };
+    foreach (var l in lines)
+    {
+        dbOrder.ItemIds.Add(l.ItemId);
+        dbOrder.WarehouseIds.Add(l.WarehouseId);
+        dbOrder.Quantities.Add(l.Quantity);
+    }
     await worker.ExecuteAsync(async (ctx, ct) =>
     {
-        ctx.Orders.Add(order);
+        ctx.Orders.Add(dbOrder);
         await ctx.SaveChangesAsync(ct);
     }, ct);    
+
 })
 .WithName("PlaceOrder");
 
 app.Run();
+
+public record OrderModel(Guid Id, ICollection<OrderLineModel> Lines);
+public record OrderLineModel(int ItemId, int WarehouseId, int Quantity);

@@ -41,7 +41,25 @@ namespace stock_api.Migrations
                     table.CheckConstraint("check_stock", "quantity >= reserved");
                 });
 
-            migrationBuilder.Sql("CREATE FUNCTION \"LC_TRIGGER_AFTER_INSERT_ORDER\"() RETURNS trigger as $LC_TRIGGER_AFTER_INSERT_ORDER$\r\nBEGIN\r\n      UPDATE stock\r\n    SET reserved = reserved + x.q\r\n    FROM (\r\n        SELECT s.ctid, l.q\r\n        FROM stock s \r\n        JOIN unnest(NEW.\"item_ids\",NEW.\"warehouse_ids\",NEW.\"quantities\") AS l(i,w,q)\r\n            on (s.item_id, s.warehouse_id) = (l.i,l.w)\r\n        FOR NO KEY UPDATE\r\n    ) x\r\n    WHERE stock.ctid = x.ctid;\r\nRETURN NEW;\r\nEND;\r\n$LC_TRIGGER_AFTER_INSERT_ORDER$ LANGUAGE plpgsql;\r\nCREATE TRIGGER LC_TRIGGER_AFTER_INSERT_ORDER AFTER INSERT\r\nON \"orders\"\r\nFOR EACH ROW EXECUTE PROCEDURE \"LC_TRIGGER_AFTER_INSERT_ORDER\"();");
+            migrationBuilder.Sql("""
+            CREATE FUNCTION "LC_TRIGGER_AFTER_INSERT_ORDER"() RETURNS trigger as $LC_TRIGGER_AFTER_INSERT_ORDER$
+                DECLARE x RECORD;
+            BEGIN
+                FOR x 
+                    IN  SELECT l.* 
+                        FROM UNNEST(NEW.item_ids,NEW.warehouse_ids,NEW.quantities) as l(i,w,q)
+                LOOP
+                    UPDATE stock s
+                        SET reserved = reserved + x.q
+                    WHERE (s.item_id,s.warehouse_id) = (x.i,x.w);
+                END LOOP;              
+                RETURN NEW;
+            END;
+            $LC_TRIGGER_AFTER_INSERT_ORDER$ LANGUAGE plpgsql;
+            CREATE TRIGGER LC_TRIGGER_AFTER_INSERT_ORDER AFTER INSERT
+            ON "orders"
+            FOR EACH ROW EXECUTE PROCEDURE "LC_TRIGGER_AFTER_INSERT_ORDER"();
+            """);
         }
 
         /// <inheritdoc />

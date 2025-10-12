@@ -29,8 +29,8 @@ export default function () {
             quantity: rand(1, 5)
         })
     }
-    const payload = JSON.stringify({ id: crypto.randomUUID(), lines: lines });
+    const payload = JSON.stringify(lines);
 
 
-    http.post(`${url}/place-order`, payload, params);
+    http.put(`${url}/place-order/${crypto.randomUUID()}`, payload, params);
 }

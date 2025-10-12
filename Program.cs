@@ -34,29 +34,36 @@ if (app.Environment.IsDevelopment())
 //app.UseHttpsRedirection();
 
 
-app.MapPost("/place-order/", async (OrderModel order, DbQueueService<StockApiDataContext> worker, CancellationToken ct) =>
+app.MapPut("/place-order/{id}", async (Guid id, ICollection<OrderLineModel> lines, DbQueueService<StockApiDataContext> worker, CancellationToken ct) =>
 {
-    var lines = from l in order.Lines
-                group l by new { l.ItemId, l.WarehouseId } into g
-                orderby g.Key.ItemId, g.Key.WarehouseId
-                select new
-                {
-                    g.Key.ItemId,
-                    g.Key.WarehouseId,
-                    Quantity = g.Aggregate(0, (s, l) => s + l.Quantity)
-                };
+    var q = from l in lines
+            group l by new { l.ItemId, l.WarehouseId } into g
+            orderby g.Key.ItemId, g.Key.WarehouseId
+            select new
+            {
+                g.Key.ItemId,
+                g.Key.WarehouseId,
+                Quantity = g.Aggregate(0, (s, l) => s + l.Quantity)
+            };
 
-    Order dbOrder = new() { Id = order.Id };
-    foreach (var l in lines)
+    List<int> itemIds = [], warehouseIds = [], quantities = [];
+    foreach (var l in q)
     {
-        dbOrder.ItemIds.Add(l.ItemId);
-        dbOrder.WarehouseIds.Add(l.WarehouseId);
-        dbOrder.Quantities.Add(l.Quantity);
+        itemIds.Add(l.ItemId);
+        warehouseIds.Add(l.WarehouseId);
+        quantities.Add(l.Quantity);
     }
     await worker.ExecuteAsync(async (ctx, ct) =>
     {
-        ctx.Orders.Add(dbOrder);
-        await ctx.SaveChangesAsync(ct);
+        var db = ctx.Database;
+        await db.CreateExecutionStrategy().ExecuteInTransactionAsync(async ct =>
+        {
+            await db.ExecuteSqlAsync($"""
+                INSERT INTO orders 
+                VALUES({id},{itemIds},{warehouseIds},{quantities}) 
+                ON CONFLICT (id) DO NOTHING
+                """, ct);
+        }, ct => Task.FromResult(false), ct);
     }, ct);    
 
 })
@@ -64,5 +71,4 @@ app.MapPost("/place-order/", async (OrderModel order, DbQueueService<StockApiDat
 
 app.Run();
 
-public record OrderModel(Guid Id, ICollection<OrderLineModel> Lines);
 public record OrderLineModel(int ItemId, int WarehouseId, int Quantity);

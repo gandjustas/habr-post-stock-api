@@ -1,16 +1,14 @@
 @stock_api_HostAddress = http://localhost:5011
 
-POST  {{stock_api_HostAddress}}/place-order
+PUT  {{stock_api_HostAddress}}/place-order/{{$guid}}
 Content-Type: application/json
 
-{
-    "id":"{{$guid}}",
-    "lines":[
-        {
-            "itemId":1,
-            "warehouseId":1,
-            "quantity":1
-        }
-    ]
-}
+
+[
+    {
+        "itemId":1,
+        "warehouseId":1,
+        "quantity":1
+    }
+]
 ###

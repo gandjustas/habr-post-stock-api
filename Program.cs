@@ -48,14 +48,22 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     {
         ctx.Orders.Add(order);
         await ctx.SaveChangesAsync(ct);
-        var q = from l in ctx.OrderLines
-                where l.OrderId == order.Id
-                join s in ctx.Stock
-                on new { l.ItemId, l.WarehouseId } equals new { s.ItemId, s.WarehouseId }
-                select new { s, l };
-        await q.ExecuteUpdateAsync(setter => setter.SetProperty(x => x.s.Reserved, x => x.s.Reserved + x.l.Quantity), ct);
 
-        if (await q.AnyAsync(x => x.s.Quantity < x.s.Reserved, ct)) throw new Exception("Oversell");
+        var updated = db.SqlQuery<Stock>($"""
+        UPDATE stock s
+        SET reserved = s.reserved + l.quantity
+        FROM (SELECT s.item_id,s.warehouse_id,l.quantity
+            FROM stock s 
+            JOIN order_lines as l 
+                ON (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
+            where l.order_id = {order.Id}
+            ORDER BY 1,2
+            FOR NO KEY UPDATE OF s) l
+        WHERE (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
+        RETURNING s.*
+        """);
+
+        if (await updated.AsAsyncEnumerable().AnyAsync(x => x.Quantity < x.Reserved, ct)) throw new Exception("Oversell");
     }, ct => Task.FromResult(false), ct);
     
 })

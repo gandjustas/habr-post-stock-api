@@ -46,7 +46,12 @@ public class StockApiDataContext(DbContextOptions<StockApiDataContext> options) 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var tableBuilder = modelBuilder.Entity<Stock>();
-        tableBuilder.Property(s => s.Reserved).HasDefaultValue(0);
+        var reservedProp = tableBuilder.Property(s => s.Reserved).HasDefaultValue(0);
+        var quantityProp = tableBuilder.Property(s => s.Quantity);
+
+        tableBuilder.ToTable(t =>
+            t.HasCheckConstraint("check_stock", $"{quantityProp.Metadata.GetColumnName()} >= {reservedProp.Metadata.GetColumnName()}"));
+
     }
 
 

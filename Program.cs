@@ -49,21 +49,19 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
         ctx.Orders.Add(order);
         await ctx.SaveChangesAsync(ct);
 
-        var updated = db.SqlQuery<Stock>($"""
+        await db.ExecuteSqlAsync($"""
         UPDATE stock s
         SET reserved = s.reserved + l.quantity
         FROM (SELECT s.item_id,s.warehouse_id,l.quantity
             FROM stock s 
             JOIN order_lines as l 
                 ON (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
-            where l.order_id = {order.Id}
+            WHERE l.order_id = {order.Id}
             ORDER BY 1,2
             FOR NO KEY UPDATE OF s) l
         WHERE (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
-        RETURNING s.*
-        """);
+        """, ct);
 
-        if (await updated.AsAsyncEnumerable().AnyAsync(x => x.Quantity < x.Reserved, ct)) throw new Exception("Oversell");
     }, ct => Task.FromResult(false), ct);
     
 })

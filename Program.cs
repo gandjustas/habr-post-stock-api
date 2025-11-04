@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Laraue.EfCoreTriggers.PostgreSql.Extensions;
+using Laraue.EfCoreTriggers.SqlServer.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,10 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<StockApiDataContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
-            npgOptions => npgOptions.EnableRetryOnFailure())
-       .UseSnakeCaseNamingConvention()
-       .UsePostgreSqlTriggers()
+    opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
+            sqlOptions => sqlOptions.EnableRetryOnFailure())
+       .UseSqlServerTriggers()
        
 );
 var app = builder.Build();

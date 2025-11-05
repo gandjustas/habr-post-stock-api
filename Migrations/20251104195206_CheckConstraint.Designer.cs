@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -10,9 +11,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace stock_api.Migrations
 {
     [DbContext(typeof(StockApiDataContext))]
-    partial class StockApiDataContextModelSnapshot : ModelSnapshot
+    [Migration("20251104195206_CheckConstraint")]
+    partial class CheckConstraint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -47,10 +50,6 @@ namespace stock_api.Migrations
                     b.Property<int>("WarehouseId")
                         .HasColumnType("integer")
                         .HasColumnName("warehouse_id");
-
-                    b.Property<bool>("IsReserved")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_reserved");
 
                     b.Property<int>("Quantity")
                         .HasColumnType("integer")

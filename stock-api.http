@@ -14,3 +14,24 @@ Content-Type: application/json
     ]
 }
 ###
+
+
+POST  {{stock_api_HostAddress}}/place-order
+Content-Type: application/json
+
+{
+    "id":"{{$guid}}",
+    "lines":[
+        {
+            "itemId":1,
+            "warehouseId":1,
+            "quantity":1
+        },
+        {
+            "itemId":10,
+            "warehouseId":10,
+            "quantity":1000000
+        }
+    ]
+}
+###

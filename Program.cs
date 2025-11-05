@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualBasic;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -9,6 +11,7 @@ builder.Services.AddDbContext<StockApiDataContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
        .UseSnakeCaseNamingConvention()
 );
+builder.Services.AddSingleton(TimeProvider.System);
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -25,7 +28,6 @@ if (app.Environment.IsDevelopment())
 
 //app.UseHttpsRedirection();
 
-
 app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, CancellationToken ct) =>
 {
     var lines = from l in order.Lines
@@ -41,17 +43,45 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     order.Lines.Clear();
     order.Lines.AddRange(lines);
 
-    await using var t = await ctx.Database.BeginTransactionAsync(ct);
-    ctx.Orders.Add(order);
-    await ctx.SaveChangesAsync(ct);
-    foreach (var l in order.Lines.OrderBy(l => l.ItemId).ThenBy(l => l.WarehouseId))
+    try
     {
-        await ctx.Stock
-                 .Where(s => s.ItemId == l.ItemId && s.WarehouseId == l.WarehouseId)
-                 .ExecuteUpdateAsync(setter => setter.SetProperty(s => s.Reserved, s => s.Reserved + l.Quantity), ct);
+        ctx.Orders.Add(order);
+        await ctx.SaveChangesAsync(ct);
+        foreach (var l in order.Lines)
+        {
+            await using (var t = await ctx.Database.BeginTransactionAsync(ct))
+            {
+                await ctx.Stock
+                        .Where(s => s.ItemId == l.ItemId && s.WarehouseId == l.WarehouseId)
+                        .ExecuteUpdateAsync(setter =>
+                            setter.SetProperty(
+                                s => s.Reserved,
+                                s => s.Reserved + l.Quantity),
+                            ct);
+                l.IsReserved = true;
+                await ctx.SaveChangesAsync(ct);
+                await t.CommitAsync(ct);
+            }
+        }
     }
-    await t.CommitAsync(ct);
+    catch
+    {
+        // Rollback stock updates
+        foreach (var l in order.Lines.Where(l => l.IsReserved))
+        {
+            await ctx.Stock
+                    .Where(s => s.ItemId == l.ItemId && s.WarehouseId == l.WarehouseId)
+                    .ExecuteUpdateAsync(setter =>
+                        setter.SetProperty(
+                            s => s.Reserved,
+                            s => s.Reserved - l.Quantity),
+                        CancellationToken.None);
+        }
+        ctx.Orders.Remove(order);
+        await ctx.SaveChangesAsync(CancellationToken.None);
 
+        throw;
+    }
 })
 .WithName("PlaceOrder");
 

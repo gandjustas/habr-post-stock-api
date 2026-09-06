@@ -8,7 +8,7 @@ const itemsCount = 10;
 const warehousesCount = 10;
 export const options = {
     iterations: itemsCount * warehousesCount * 300,
-    vus: 50,
+    vus: 200,
 };
 
 export default function () {
@@ -20,7 +20,7 @@ export default function () {
         },
     };
 
-    const count = rand(1, itemsCount);
+    const count = 1;
     let lines = [];
     for (let index = 0; index < count; index++) {
         lines.push({

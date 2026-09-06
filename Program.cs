@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,7 +37,7 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
                     WarehouseId = g.Key.WarehouseId,
                     Quantity = g.Aggregate(0, (s, l) => s + l.Quantity)
                 };
-    lines = lines.ToArray();
+    lines = [.. lines];
 
     order.Lines.Clear();
     order.Lines.AddRange(lines);

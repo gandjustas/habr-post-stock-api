@@ -1,14 +1,63 @@
+using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ReserveKey = (int ItemId, int WarehouseId);
+
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-builder.Services.AddDbContext<StockApiDataContext>(opt =>
+var services = builder.Services;
+services.AddOpenApi();
+services.AddDbContext<StockApiDataContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
         npgOptions => npgOptions.EnableRetryOnFailure())
        .UseSnakeCaseNamingConvention()
 );
+
+var configuration = builder.Configuration;
+
+services.Configure<ProducerConfig>(configuration.GetSection("Kafka:Producer"));
+services.Configure<ConsumerConfig>(configuration.GetSection("Kafka:Consumer"));
+
+var instanceId = $"reply-{Environment.MachineName}";// $"reply-{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
+services.AddKeyedSingleton("instanceId", instanceId);
+
+services.AddSingleton(typeof(ISerializer<>),typeof(KafkaMemoryPackSerDes<>));
+services.AddSingleton(typeof(IDeserializer<>),typeof(KafkaMemoryPackSerDes<>));
+
+services.AddSingleton(sp => 
+    new ProducerBuilder<ReserveKey, ReserveRequestMessage>(sp.GetRequiredService<IOptions<ProducerConfig>>().Value)
+    .SetKeySerializer(sp.GetRequiredService<ISerializer<ReserveKey>>())
+    .SetValueSerializer(sp.GetRequiredService<ISerializer<ReserveRequestMessage>>())
+    .Build());
+
+services.AddSingleton(sp => 
+    new ProducerBuilder<Null, ReserveResponseMessage>(sp.GetRequiredService<IOptions<ProducerConfig>>().Value)
+    .SetValueSerializer(sp.GetRequiredService<ISerializer<ReserveResponseMessage>>())
+    .Build());
+
+services.AddTransient(sp => 
+    new ConsumerBuilder<ReserveKey, ReserveRequestMessage>(new ConsumerConfig(sp.GetRequiredService<IOptions<ConsumerConfig>>().Value)
+    {
+        GroupId = "stock" // one goup for all
+    })
+    .SetKeyDeserializer(sp.GetRequiredService<IDeserializer<ReserveKey>>())
+    .SetValueDeserializer(sp.GetRequiredService<IDeserializer<ReserveRequestMessage>>())
+    .Build());
+
+
+services.AddTransient(sp => 
+    new ConsumerBuilder<Null, ReserveResponseMessage>(new ConsumerConfig(sp.GetRequiredService<IOptions<ConsumerConfig>>().Value)
+    {
+        GroupId = sp.GetRequiredKeyedService<string>("instanceId")
+    })
+    .SetValueDeserializer(sp.GetRequiredService<IDeserializer<ReserveResponseMessage>>())
+    .Build());
+
+services.AddSingleton<OrderReservation>();
+services.AddHostedService(sp => sp.GetRequiredService<OrderReservation>());
+services.AddHostedService<ReservationProcessor>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -26,7 +75,7 @@ if (app.Environment.IsDevelopment())
 //app.UseHttpsRedirection();
 
 
-app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, CancellationToken ct) =>
+app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, OrderReservation reservation, CancellationToken ct) =>
 {
     var lines = from l in order.Lines
                 group l by new { l.ItemId, l.WarehouseId } into g
@@ -41,28 +90,10 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
 
     order.Lines.Clear();
     order.Lines.AddRange(lines);
+    ctx.Orders.Add(order);
+    await ctx.SaveChangesAsync(ct);
 
-    var db = ctx.Database;
-    await db.CreateExecutionStrategy().ExecuteInTransactionAsync(async ct =>
-    {
-        ctx.Orders.Add(order);
-        await ctx.SaveChangesAsync(ct);
-
-        await db.ExecuteSqlAsync($"""
-        UPDATE stock s
-        SET reserved = s.reserved + l.quantity
-        FROM (SELECT s.item_id,s.warehouse_id,l.quantity
-            FROM stock s 
-            JOIN order_lines as l 
-                ON (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
-            WHERE l.order_id = {order.Id}
-            ORDER BY 1,2
-            FOR NO KEY UPDATE OF s) l
-        WHERE (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
-        """, ct);
-
-    }, ct => Task.FromResult(false), ct);
-    
+    await reservation.Reserve(order, ct);    
 })
 .WithName("PlaceOrder");
 

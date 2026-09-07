@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MemoryPack;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
@@ -55,3 +56,25 @@ public class StockApiDataContext(DbContextOptions<StockApiDataContext> options) 
 
 
 }
+
+
+[MemoryPackable]
+public partial class ReserveRequestMessage
+{
+    required public Guid OrderId { get; set; }
+    required public int Quantity { get; set; }
+    required public string ReplyTo { get; set; }
+}
+
+[MemoryPackable]
+public partial class ReserveResponseMessage
+{
+    required public Guid OrderId { get; set; }
+    public int ItemId { get; set; }
+    public int WarehouseId { get; set; }
+    required public bool IsError { get; set; }
+    public string? ErrorMessage { get; set; }
+
+}
+
+

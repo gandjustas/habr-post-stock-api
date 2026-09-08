@@ -5,23 +5,27 @@ execution: local
 scenarios: (100.00%) 1 scenario, 200 max VUs, 10m30s max duration (incl. graceful stop):
         * default: 30000 iterations shared among 200 VUs (maxDuration: 10m0s, gracefulStop: 30s)
 
+
 █ TOTAL RESULTS 
 
   HTTP
-  http_req_duration..............: avg=3.1s min=453.65ms med=3.1s max=5.42s p(90)=3.12s p(95)=3.12s
-    { expected_response:true }...: avg=3.1s min=453.65ms med=3.1s max=5.42s p(90)=3.12s p(95)=3.12s
+  http_req_duration..............: avg=91.23ms min=44.36ms med=92.19ms max=161.29ms p(90)=109.81ms p(95)=115.33ms
+    { expected_response:true }...: avg=91.23ms min=44.36ms med=92.19ms max=161.29ms p(90)=109.81ms p(95)=115.33ms
   http_req_failed................: 0.00%  0 out of 30000
-  http_reqs......................: 30000  64.27066/s
+  http_reqs......................: 30000  2177.547307/s
 
   EXECUTION
-  iteration_duration.............: avg=3.1s min=468.57ms med=3.1s max=5.44s p(90)=3.12s p(95)=3.12s
-  iterations.....................: 30000  64.27066/s
-  vus............................: 53     min=53         max=200
+  iteration_duration.............: avg=91.55ms min=45.09ms med=92.4ms  max=161.3ms  p(90)=109.99ms p(95)=115.83ms
+  iterations.....................: 30000  2177.547307/s
+  vus............................: 200    min=200        max=200
   vus_max........................: 200    min=200        max=200
 
   NETWORK
-  data_received..................: 2.8 MB 5.9 kB/s
-  data_sent......................: 6.9 MB 15 kB/s
+  data_received..................: 2.8 MB 200 kB/s
+  data_sent......................: 6.9 MB 503 kB/s
 
-running (07m46.8s), 000/200 VUs, 30000 complete and 0 interrupted iterations
-default ✓ [======================================] 200 VUs  07m46.8s/10m0s  30000/30000 shared iters
+
+
+
+running (00m13.8s), 000/200 VUs, 30000 complete and 0 interrupted iterations
+default ✓ [======================================] 200 VUs  00m13.8s/10m0s  30000/30000 shared iters

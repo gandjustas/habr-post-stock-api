@@ -18,6 +18,8 @@ var configuration = builder.Configuration;
 
 services.Configure<ProducerConfig>(configuration.GetSection("Kafka:Producer"));
 services.Configure<ConsumerConfig>(configuration.GetSection("Kafka:Consumer"));
+services.Configure<AdminClientConfig>(configuration.GetSection("Kafka:AdminClient"));
+
 
 var instanceId = $"reply-{Environment.MachineName}";// $"reply-{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 services.AddKeyedSingleton("instanceId", instanceId);
@@ -53,6 +55,11 @@ services.AddTransient(sp =>
     })
     .SetValueDeserializer(sp.GetRequiredService<IDeserializer<ReserveResponseMessage>>())
     .Build());
+
+services.AddTransient(sp => 
+    new AdminClientBuilder(sp.GetRequiredService<IOptions<AdminClientConfig>>().Value)
+    .Build()
+);
 
 services.AddSingleton<OrderReservation>();
 services.AddHostedService(sp => sp.GetRequiredService<OrderReservation>());

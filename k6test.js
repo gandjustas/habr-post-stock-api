@@ -24,9 +24,9 @@ export default function () {
     let lines = [];
     for (let index = 0; index < count; index++) {
         lines.push({
-            itemId: rand(1, warehousesCount),
-            warehouseId: rand(1, warehousesCount),
-            quantity: rand(1, 5)
+            itemId: 1, //rand(1, warehousesCount),
+            warehouseId: 1, //rand(1, warehousesCount),
+            quantity: 1, //rand(1, 5)
         })
     }
     const payload = JSON.stringify({ id: crypto.randomUUID(), lines: lines });

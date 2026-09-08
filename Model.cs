@@ -36,11 +36,22 @@ public class OrderLine
 
 }
 
+public class StockOperations
+{
+    public int ItemId { get; set; }
+    public int WarehouseId { get; set; }
+    public Guid? OrderId { get; set; }
+
+    public int Quantity { get; set; } 
+}
+
 public class StockApiDataContext(DbContextOptions<StockApiDataContext> options) : DbContext(options)
 {
     public DbSet<Order> Orders { get; set; } = null!;
     public DbSet<OrderLine> OrderLines { get; set; } = null!;
     public DbSet<Stock> Stock { get; set; } = null!;
+
+    public DbSet<StockOperations> Operations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,7 +62,14 @@ public class StockApiDataContext(DbContextOptions<StockApiDataContext> options) 
         tableBuilder.ToTable(t =>
             t.HasCheckConstraint("check_stock", $"{quantityProp.Metadata.GetColumnName()} >= {reservedProp.Metadata.GetColumnName()}"));
 
+
+        modelBuilder.Entity<StockOperations>()
+        .ToTable("operations")
+        .HasNoKey()
+        .HasIndex(o => new { o.ItemId, o.WarehouseId });
+
     }
+
 
 
 }

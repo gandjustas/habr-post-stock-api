@@ -9,6 +9,11 @@ builder.Services.AddDbContext<StockApiDataContext>(opt =>
         npgOptions => npgOptions.EnableRetryOnFailure())
        .UseSnakeCaseNamingConvention()
 );
+
+builder.Services.AddSingleton<ReserveQueue>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ReserveQueue>());
+
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -26,7 +31,7 @@ if (app.Environment.IsDevelopment())
 //app.UseHttpsRedirection();
 
 
-app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, CancellationToken ct) =>
+app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, ReserveQueue queue, CancellationToken ct) =>
 {
     var lines = from l in order.Lines
                 group l by new { l.ItemId, l.WarehouseId } into g
@@ -43,26 +48,10 @@ app.MapPost("/place-order/", async (Order order, StockApiDataContext ctx, Cancel
     order.Lines.AddRange(lines);
 
     var db = ctx.Database;
-    await db.CreateExecutionStrategy().ExecuteInTransactionAsync(async ct =>
-    {
-        ctx.Orders.Add(order);
-        await ctx.SaveChangesAsync(ct);
+    ctx.Orders.Add(order);
+    await ctx.SaveChangesAsync(ct);
 
-        await db.ExecuteSqlAsync($"""
-        UPDATE stock s
-        SET reserved = s.reserved + l.quantity
-        FROM (SELECT s.item_id,s.warehouse_id,l.quantity
-            FROM stock s 
-            JOIN order_lines as l 
-                ON (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
-            WHERE l.order_id = {order.Id}
-            ORDER BY 1,2
-            FOR NO KEY UPDATE OF s) l
-        WHERE (s.item_id,s.warehouse_id) = (l.item_id,l.warehouse_id)
-        """, ct);
-
-    }, ct => Task.FromResult(false), ct);
-    
+    await queue.Reserve(order, ct);    
 })
 .WithName("PlaceOrder");
 
